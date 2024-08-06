@@ -16,6 +16,7 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -171,7 +172,16 @@ public class MainActivity extends AppCompatActivity {
             if (MainActivity.ACTION_USB_PERMISSION.equals(action)) {
                 synchronized (this) {
                     UsbManager usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
-                    UsbDevice usbDevice = (UsbDevice) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                    UsbConnection usbConnection = UsbPrintersConnections.selectFirstConnected(context);
+                    UsbDevice usbDevice = null;
+                    if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        if (usbConnection != null) {
+                            usbDevice = usbConnection.getDevice();
+                        }
+                    } else {
+                        usbDevice = (UsbDevice) intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                    }
+
                     if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
                         if (usbManager != null && usbDevice != null) {
                             new AsyncUsbEscPosPrint(
@@ -208,15 +218,31 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        PendingIntent permissionIntent = PendingIntent.getBroadcast(
-            this,
-            0,
-            new Intent(MainActivity.ACTION_USB_PERMISSION),
-            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S ? PendingIntent.FLAG_MUTABLE : 0
-        );
-        IntentFilter filter = new IntentFilter(MainActivity.ACTION_USB_PERMISSION);
-        registerReceiver(this.usbReceiver, filter);
-        usbManager.requestPermission(usbConnection.getDevice(), permissionIntent);
+        Intent imIntent = new Intent(MainActivity.ACTION_USB_PERMISSION);
+        imIntent.setPackage(getPackageName());
+        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            imIntent.putExtra(UsbManager.EXTRA_PERMISSION_GRANTED, true);
+            PendingIntent permissionIntent = PendingIntent.getBroadcast(
+                    this,
+                    0,
+                    imIntent,
+                    PendingIntent.FLAG_IMMUTABLE
+            );
+            IntentFilter filter = new IntentFilter(MainActivity.ACTION_USB_PERMISSION);
+            registerReceiver(this.usbReceiver, filter);
+            usbManager.requestPermission(usbConnection.getDevice(), permissionIntent);
+        } else {
+            PendingIntent permissionIntent = PendingIntent.getBroadcast(
+                    this,
+                    0,
+                    imIntent,
+                    android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S ? PendingIntent.FLAG_MUTABLE : 0
+            );
+            IntentFilter filter = new IntentFilter(MainActivity.ACTION_USB_PERMISSION);
+            registerReceiver(this.usbReceiver, filter);
+            usbManager.requestPermission(usbConnection.getDevice(), permissionIntent);
+        }
+
     }
 
     /*==============================================================================================
